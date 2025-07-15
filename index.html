@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AR Interior Designer</title>
+  <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <h1>DECORA Interior Designer</h1>
+
+  <!-- Furniture Picker -->
+  <select id="modelPicker" aria-label="Choose furniture model">
+    <option value="red_chair.glb">Chair</option>
+    <option value="sofa.glb">Sofa</option>
+    <option value="picnic_table.glb">Table</option>
+    <option value="bed.glb">Bed</option>
+    <option value="cupboard.glb">Cupboard</option>
+    <option value="banker_lamp.glb">Lamp</option>
+    <option value="source.glb">Source</option>
+    <option value="corner_sofa.glb">Corner Sofa</option>
+    <option value="cupboard_wooden_rusty">Wooden Cupboard</option>
+    <option value="darkvictorianbedsidetable.glb">Bed Side Table</option>
+    <option value="fbx.glb">Bed</option>
+    <option value="rattan_bar_stool.glb">Bar Stool</option>
+    <option value="restaurant_table_and_chairs.glb">Table with Chairs</option>
+    <option value="stool.glb">Stool</option>
+  </select>
+
+  <!-- Loading spinner -->
+  <div id="loader" class="hidden" role="status" aria-live="polite" aria-label="Loading model...">
+    Loading model...
+  </div>
+
+  <!-- AR Viewer -->
+  <model-viewer
+    id="furniture"
+    src="assets/red_chair.glb"
+    ar
+    ar-modes="scene-viewer webxr quick-look"
+    camera-controls
+    auto-rotate
+    style="width: 100%; height: 500px;"
+  ></model-viewer>
+
+  <!-- Controls -->
+  <div class="controls">
+    <label for="colorPicker">Color:
+      <input type="color" id="colorPicker" value="#ffffff" aria-valuetext="Color picker" />
+    </label>
+
+    <label for="scaleSlider">
+      Size: <span id="scaleValue">1.0</span>
+      <input type="range" id="scaleSlider" min="0.5" max="2" step="0.1" value="1" aria-valuemin="0.5" aria-valuemax="2" aria-valuenow="1" />
+    </label>
+
+    <label for="rotateSlider">
+      Rotate: <span id="rotateValue">0°</span>
+      <input type="range" id="rotateSlider" min="0" max="360" step="1" value="0" aria-valuemin="0" aria-valuemax="360" aria-valuenow="0" />
+    </label>
+  </div>
+
+  <!-- Theme toggle -->
+  <div class="theme-toggle">
+    <label>
+      <input type="checkbox" id="themeSwitch" />
+      Dark Mode
+    </label>
+    <button id="resetThemeBtn" type="button" aria-label="Reset theme to system default">Reset Theme</button>
+  </div>
+
+  <!-- Save / Load Buttons -->
+  <div class="save-controls">
+    <button id="saveBtn" type="button">💾 Save Layout</button>
+    <button id="loadBtn" type="button">🔄 Load Layout</button>
+    <button id="resetBtn" type="button">🗑️ Reset Layout</button>
+  </div>
+
+  <!-- Notification -->
+  <div id="notification" role="alert" aria-live="assertive" class="hidden"></div>
+
+  <script>
+    const viewer = document.getElementById("furniture");
+    const colorPicker = document.getElementById("colorPicker");
+    const scaleSlider = document.getElementById("scaleSlider");
+    const rotateSlider = document.getElementById("rotateSlider");
+    const modelPicker = document.getElementById("modelPicker");
+    const themeSwitch = document.getElementById('themeSwitch');
+    const resetThemeBtn = document.getElementById('resetThemeBtn');
+    const saveBtn = document.getElementById("saveBtn");
+    const loadBtn = document.getElementById("loadBtn");
+    const resetBtn = document.getElementById("resetBtn");
+    const notification = document.getElementById("notification");
+    const loader = document.getElementById("loader");
+    const scaleValueDisplay = document.getElementById('scaleValue');
+    const rotateValueDisplay = document.getElementById('rotateValue');
+
+    let currentColor = colorPicker.value;
+    let currentRotation = 0;
+    const STORAGE_KEY = "arInteriorLayout";
+
+    // Show loader on model change
+    function showLoader() {
+      loader.classList.remove('hidden');
+    }
+    function hideLoader() {
+      loader.classList.add('hidden');
+    }
+
+    // Apply color to model
+    function applyColor(hex) {
+      if (!viewer.model) return;
+      const material = viewer.model.materials?.[0];
+      if (material) {
+        material.pbrMetallicRoughness.setBaseColorFactor([
+          ...hexToRgb(hex), 1
+        ]);
+      }
+    }
+
+    // Apply scale
+    function applyScale(scale) {
+      viewer.scale = `${scale} ${scale} ${scale}`;
+      scaleValueDisplay.textContent = parseFloat(scale).toFixed(1);
+      scaleSlider.setAttribute('aria-valuenow', scale);
+    }
+
+    // Apply rotation
+    function applyRotation(deg) {
+      // Rotate model around Y axis
+      viewer.style.transform = `rotateY(${deg}deg)`;
+      rotateValueDisplay.textContent = deg + '°';
+      rotateSlider.setAttribute('aria-valuenow', deg);
+      currentRotation = deg;
+    }
+
+    // Convert hex to RGB array [r,g,b] normalized
+    function hexToRgb(hex) {
+      const bigint = parseInt(hex.slice(1), 16);
+      return [
+        (bigint >> 16 & 255) / 255,
+        (bigint >> 8 & 255) / 255,
+        (bigint & 255) / 255
+      ];
+    }
+
+    // Show notification message
+    function notify(msg, duration = 3000) {
+      notification.textContent = msg;
+      notification.classList.remove('hidden');
+      setTimeout(() => {
+        notification.classList.add('hidden');
+      }, duration);
+    }
+
+    // INITIAL SETUP: Apply saved theme, layout, and listeners
+    window.addEventListener('DOMContentLoaded', () => {
+      // Load theme preference
+      const savedTheme = localStorage.getItem('theme');
+      if (savedTheme === 'dark') {
+        document.body.classList.add('dark');
+        themeSwitch.checked = true;
+      }
+
+      // Load layout if available
+      const data = JSON.parse(localStorage.getItem(STORAGE_KEY));
+      if (data) {
+        modelPicker.value = data.model;
+        colorPicker.value = data.color;
+        scaleSlider.value = data.scale;
+        rotateSlider.value = data.rotation || 0;
+        currentColor = data.color;
+
+        showLoader();
+        viewer.src = `assets/${data.model}`;
+        viewer.addEventListener("load", () => {
+          applyColor(currentColor);
+          applyScale(data.scale);
+          applyRotation(data.rotation || 0);
+          hideLoader();
+        }, { once: true });
+      } else {
+        // Initial rotation
+        applyRotation(0);
+      }
+    });
+
+    // MODEL CHANGER
+    modelPicker.addEventListener("change", (e) => {
+      showLoader();
+      viewer.src = `assets/${e.target.value}`;
+      viewer.addEventListener("load", () => {
+        applyColor(currentColor);
+        applyScale(scaleSlider.value);
+        applyRotation(currentRotation);
+        hideLoader();
+      }, { once: true });
+    });
+
+    // COLOR PICKER
+    colorPicker.addEventListener("input", (e) => {
+      currentColor = e.target.value;
+      applyColor(currentColor);
+    });
+
+    // SCALE SLIDER
+    scaleSlider.addEventListener("input", (e) => {
+      applyScale(e.target.value);
+    });
+
+    // ROTATE SLIDER
+    rotateSlider.addEventListener("input", (e) => {
+      applyRotation(e.target.value);
+    });
+
+    // THEME TOGGLE
+    themeSwitch.addEventListener('change', (e) => {
+      if (e.target.checked) {
+        document.body.classList.add('dark');
+        localStorage.setItem('theme', 'dark');
+      } else {
+        document.body.classList.remove('dark');
+        localStorage.setItem('theme', 'light');
+      }
+    });
+
+    // RESET THEME button
+    resetThemeBtn.addEventListener('click', () => {
+      document.body.classList.remove('dark');
+      themeSwitch.checked = false;
+      localStorage.removeItem('theme');
+      notify("Theme reset to system default");
+    });
+
+    // SAVE LAYOUT
+    saveBtn.addEventListener("click", () => {
+      const data = {
+        model: modelPicker.value,
+        color: currentColor,
+        scale: scaleSlider.value,
+        rotation: currentRotation
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      notify("Layout saved!");
+    });
+
+    // LOAD LAYOUT
+    loadBtn.addEventListener("click", () => {
+      const data = JSON.parse(localStorage.getItem(STORAGE_KEY));
+      if (data) {
+        showLoader();
+        modelPicker.value = data.model;
+        colorPicker.value = data.color;
+        scaleSlider.value = data.scale;
+        rotateSlider.value = data.rotation || 0;
+        currentColor = data.color;
+
+        viewer.src = `assets/${data.model}`;
+        viewer.addEventListener("load", () => {
+          applyColor(currentColor);
+          applyScale(data.scale);
+          applyRotation(data.rotation || 0);
+          hideLoader();
+        }, { once: true });
+        notify("Layout loaded!");
+      } else {
+        notify("No layout saved yet.");
+      }
+    });
+
+    // RESET LAYOUT
+    resetBtn.addEventListener("click", () => {
+      localStorage.removeItem(STORAGE_KEY);
+      modelPicker.value = "red_chair.glb";
+      colorPicker.value = "#ffffff";
+      scaleSlider.value = 1;
+      rotateSlider.value = 0;
+      currentColor = "#ffffff";
+      currentRotation = 0;
+
+      showLoader();
+      viewer.src = "assets/red_chair.glb";
+      viewer.addEventListener("load", () => {
+        applyColor(currentColor);
+        applyScale(1);
+        applyRotation(0);
+        hideLoader();
+      }, { once: true });
+
+      notify("Layout reset.");
+    });
+  </script>
+</body>
+</html>
