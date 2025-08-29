@@ -31,18 +31,6 @@ Open `index.html` in a web browser that supports WebXR or WebAR (e.g., Chrome on
 
 ```
 
-## Project Structure
-```
-├── index.html         # Main application file
-├── style.css          # CSS styling
-├── script.js          # JavaScript for AR interactions
-├── models/            # 3D models (GLTF/GLB/OBJ files)
-├── assets/            # Textures, images, and other assets
-└── README.md          # Project documentation
-```
-
----
-
 ## How to Use
 1. Open the app on a device with a camera  
 2. Select a furniture or decor model from the menu  
@@ -69,5 +57,5 @@ Open `index.html` in a web browser that supports WebXR or WebAR (e.g., Chrome on
 ---
 
 
-## 📜 License
+## License
 This project is open-source and available under the [MIT License](LICENSE).
