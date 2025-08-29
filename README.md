@@ -32,6 +32,8 @@ Open `index.html` in a web browser that supports WebXR or WebAR (e.g., Chrome on
 ```
 
 ## How to Use
+---
+
 1. Open the app on a device with a camera  
 2. Select a furniture or decor model from the menu  
 3. Point the camera at the surface where you want to place the object  
